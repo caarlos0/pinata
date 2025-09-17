@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestProcessRealWorkflows(t *testing.T) {
+func TestProcess(t *testing.T) {
 	for _, name := range []string{"ci.yml", "simple.yml"} {
 		t.Run(name, func(t *testing.T) {
 			inPath := filepath.Join("testdata", name)
@@ -17,7 +17,7 @@ func TestProcessRealWorkflows(t *testing.T) {
 
 			changed, err := process(inPath, outPath)
 			require.NoError(t, err)
-			require.True(t, changed)
+			require.True(t, changed, inPath)
 
 			got, err := os.ReadFile(outPath)
 			require.NoError(t, err)

@@ -4,7 +4,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+      - uses: actions/checkout@v4
       - uses: docker://alpine:3.18
       - uses: ./local/action@v1
       - uses: ../local/action@v1
@@ -13,7 +13,7 @@ jobs:
       - uses: https://example.com/action@v1
       - width:
           a: b
-        uses: actions/setup-go@0caeaed6fd66a828038c2da3c0f662a42862658f # comment
-      - uses: caarlos0/meta/.github/workflows/govulncheck.yml@395f87b2cc4fbb0a99db4decb1b3bbd16bc07cfc # comment lalal
-      - uses: docker/setup-qemu-action@2b82ce82d56a2a04d2637cd93a637ae1b359c0a7 # comment
-      - uses: docker/setup-buildx-action@885d1462b80bc1c1c7f0b00334ad271f09369c55
+        uses: actions/setup-go@v1 # comment
+      - uses: caarlos0/meta/.github/workflows/govulncheck.yml@main # comment lalal
+      - uses: docker/setup-qemu-action@v2 # comment
+      - uses: docker/setup-buildx-action@v2

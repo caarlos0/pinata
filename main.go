@@ -25,7 +25,7 @@ var (
 )
 
 func main() {
-	dir := "."
+	dir := ".github/workflows"
 	if len(os.Args) > 1 {
 		dir = os.Args[1]
 	}
@@ -75,8 +75,10 @@ func process(inPath, outPath string) (bool, error) {
 	if err := s.Err(); err != nil {
 		return false, fmt.Errorf("process: %w", err)
 	}
-	if err := os.WriteFile(outPath, []byte(out.String()), 0o644); err != nil {
-		return false, fmt.Errorf("process: %w", err)
+	if changed {
+		if err := os.WriteFile(outPath, []byte(out.String()), 0o644); err != nil {
+			return false, fmt.Errorf("process: %w", err)
+		}
 	}
 	return changed, nil
 }
