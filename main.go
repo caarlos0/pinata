@@ -64,7 +64,10 @@ func process(path string) (bool, error) {
 			out.WriteByte('\n')
 			continue
 		}
-		newLine := replaceInLine(line)
+		newLine, err := replaceInLine(line)
+		if err != nil {
+			return false, err
+		}
 		changed = changed || newLine != line
 		out.WriteString(newLine)
 		out.WriteByte('\n')
@@ -75,7 +78,7 @@ func process(path string) (bool, error) {
 	return changed, os.WriteFile(path, []byte(out.String()), 0o644)
 }
 
-func replaceInLine(line string) string {
+func replaceInLine(line string) (string, error) {
 	dep := line
 	if i := strings.Index(dep, usesPrefix); i >= 0 {
 		dep = dep[i+len(usesPrefix):]
@@ -84,29 +87,48 @@ func replaceInLine(line string) string {
 		dep = dep[:i]
 	}
 	dep = strings.TrimSpace(dep)
+	dep = strings.TrimFunc(dep, func(r rune) bool {
+		return r == '"' || r == '\''
+	})
 	if dep == line {
-		fmt.Println("no changes to", line)
-		return line
+		return line, nil
 	}
 
 	repo, ref, ok := strings.Cut(dep, "@")
 	if !ok {
-		fmt.Println("could not get ref from", line)
-		return line
+		return line, nil
 	}
 
 	if isSHA(ref) {
-		fmt.Println("already pinned:", line)
-		return line
+		return line, nil
 	}
 
-	newRef, err := resolve(repo, ref)
+	// skip local paths, docker, urls, and expressions
+	if strings.HasPrefix(repo, "./") ||
+		strings.HasPrefix(repo, "../") ||
+		strings.HasPrefix(repo, "/") ||
+		strings.HasPrefix(repo, "docker://") ||
+		strings.HasPrefix(repo, "http://") ||
+		strings.HasPrefix(repo, "https://") ||
+		strings.Contains(ref, "${{") {
+		return line, nil
+	}
+
+	// handle subpaths: only pin if it's a reusable workflow under .github/workflows/
+	baseRepo := repo
+	if parts := strings.SplitN(repo, "/", 3); len(parts) >= 3 {
+		if !strings.HasPrefix(parts[2], ".github/workflows/") {
+			return line, nil
+		}
+		baseRepo = parts[0] + "/" + parts[1]
+	}
+
+	newRef, err := resolve(baseRepo, ref)
 	if err != nil {
-		fmt.Println("could not resolve", line, ":", err)
-		return line
+		return line, err
 	}
 
-	return strings.Replace(line, dep, repo+"@"+newRef, 1)
+	return strings.Replace(line, dep, repo+"@"+newRef, 1), nil
 }
 
 func isSHA(s string) bool {
@@ -118,10 +140,6 @@ func isSHA(s string) bool {
 }
 
 func resolve(repo, ref string) (string, error) {
-	parts := strings.SplitN(repo, "/", 3)
-	if len(parts) >= 2 {
-		repo = parts[0] + "/" + parts[1]
-	}
 	key := repo + "@" + ref
 	if v, ok := cache[key]; ok {
 		return v, nil
