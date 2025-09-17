@@ -9,18 +9,19 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
+)
+
+const (
+	usesPrefix = "uses:"
+	shaLen     = 40
 )
 
 var (
 	httpClient = &http.Client{Timeout: 15 * time.Second}
 	token      = os.Getenv("GITHUB_TOKEN")
 	cache      = map[string]string{}
-	// Two simple patterns: with extra path segment(s) and without
-	reUseWithPath = regexp.MustCompile(`([A-Za-z0-9-]+)/([A-Za-z0-9._-]+)/([A-Za-z0-9/_.-]+)@v[0-9][A-Za-z0-9._-]*`)
-	reUseNoPath   = regexp.MustCompile(`([A-Za-z0-9-]+)/([A-Za-z0-9._-]+)@v[0-9][A-Za-z0-9._-]*`)
 )
 
 func main() {
@@ -28,21 +29,22 @@ func main() {
 	if len(os.Args) > 1 {
 		dir = os.Args[1]
 	}
-	filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() || !strings.HasSuffix(strings.ToLower(path), ".yml") {
+	if err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() || filepath.Ext(path) != ".yml" {
 			return nil
 		}
 		changed, err := process(path)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, path+": "+err.Error())
-			os.Exit(1)
-			return nil
+			return err
 		}
 		if changed {
 			fmt.Println("updated", path)
 		}
 		return nil
-	})
+	}); err != nil {
+		os.Exit(1)
+	}
 }
 
 func process(path string) (bool, error) {
@@ -57,114 +59,76 @@ func process(path string) (bool, error) {
 	changed := false
 	for s.Scan() {
 		line := s.Text()
-		if strings.Contains(line, "uses:") {
-			newLine := replaceInLine(line)
-			if newLine != line {
-				changed = true
-			}
-			out.WriteString(newLine)
+		if !strings.Contains(line, usesPrefix) {
+			out.WriteString(line)
 			out.WriteByte('\n')
 			continue
 		}
-		out.WriteString(line)
+		newLine := replaceInLine(line)
+		changed = changed || newLine != line
+		out.WriteString(newLine)
 		out.WriteByte('\n')
 	}
 	if err := s.Err(); err != nil {
 		return false, err
 	}
-	if !changed {
-		return false, nil
-	}
-	if err := os.WriteFile(path, []byte(out.String()), 0o644); err != nil {
-		return false, err
-	}
-	return true, nil
+	return changed, os.WriteFile(path, []byte(out.String()), 0o644)
 }
 
 func replaceInLine(line string) string {
-	idxHash := strings.IndexByte(line, '#')
-	comment := ""
-	if idxHash >= 0 {
-		comment = line[idxHash:]
-		line = line[:idxHash]
+	dep := line
+	if i := strings.Index(dep, usesPrefix); i >= 0 {
+		dep = dep[i+len(usesPrefix):]
 	}
-	orig := line
-	if !strings.Contains(line, "uses:") {
-		return orig + comment
+	if i := strings.Index(dep, " #"); i >= 0 {
+		dep = dep[:i]
 	}
-	// Replace within the whole (non-comment) line; patterns only match owner/repo@v*
-	line = reUseWithPath.ReplaceAllStringFunc(line, func(m string) string {
-		left, ref, ok := splitAt(m, "@")
-		if !ok {
-			return m
-		}
-		parts := strings.Split(left, "/")
-		if len(parts) < 3 { // owner/repo/path...
-			return m
-		}
-		owner, repo := parts[0], parts[1]
-		if isSHA(ref) {
-			return m
-		}
-		sha, err := resolve(owner, repo, ref)
-		if err != nil || sha == "" {
-			return m
-		}
-		return left + "@" + sha
-	})
-	line = reUseNoPath.ReplaceAllStringFunc(line, func(m string) string {
-		left, ref, ok := splitAt(m, "@")
-		if !ok {
-			return m
-		}
-		parts := strings.Split(left, "/")
-		if len(parts) != 2 {
-			return m
-		}
-		owner, repo := parts[0], parts[1]
-		if isSHA(ref) {
-			return m
-		}
-		sha, err := resolve(owner, repo, ref)
-		if err != nil || sha == "" {
-			return m
-		}
-		return owner + "/" + repo + "@" + sha
-	})
-	if line == orig {
-		return orig + comment
+	dep = strings.TrimSpace(dep)
+	if dep == line {
+		fmt.Println("no changes to", line)
+		return line
 	}
-	return line + comment
-}
 
-
-func splitAt(s, sep string) (string, string, bool) {
-	p := strings.SplitN(s, sep, 2)
-	if len(p) != 2 {
-		return s, "", false
+	// owner/repo/path@ref
+	repo, ref, ok := strings.Cut(dep, "@")
+	if !ok {
+		fmt.Println("could not get ref from", line)
+		return line
 	}
-	return p[0], p[1], true
+
+	if isSHA(ref) {
+		fmt.Println("already pinned:", line)
+		return line
+	}
+
+	newRef, err := resolve(repo, ref)
+	if err != nil {
+		fmt.Println("could not resolve", line, ":", err)
+		return line
+	}
+
+	return strings.Replace(line, dep, repo+"@"+newRef, 1)
 }
 
 func isSHA(s string) bool {
-	if len(s) != 40 {
+	if len(s) != shaLen {
 		return false
 	}
 	_, err := hex.DecodeString(s)
 	return err == nil
 }
 
-func resolve(owner, repo, ref string) (string, error) {
-	key := owner + "/" + repo + "@" + ref
+func resolve(repo, ref string) (string, error) {
+	key := repo + "@" + ref
 	if v, ok := cache[key]; ok {
 		return v, nil
 	}
-	url := "https://api.github.com/repos/" + owner + "/" + repo + "/commits/" + ref
+	url := "https://api.github.com/repos/" + repo + "/commits/" + ref
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("User-Agent", "pinata")
+	req.Header.Set("User-Agent", "gh-action-hasher")
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}

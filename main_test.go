@@ -56,7 +56,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4  # keep
+      - uses: actions/checkout@v4   # keep
       - name: Use foo
         uses: acme/foo/sub/act@v2
       - uses: "./ignored/local"
@@ -64,7 +64,7 @@ jobs:
       - uses: "owner/with-quotes@v1"
       - run: echo hello
   call:
-    uses: owner/repo/.github/workflows/reusable.yml@v1  # job-level
+    uses: owner/repo/.github/workflows/reusable.yml@v1   # job-level
 `, "\n") + "\n"
 
 	dir := t.TempDir()
@@ -89,19 +89,19 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@`+shaMap["actions/checkout@v4"]+`  # keep
+      - uses: actions/checkout@`+shaMap["actions/checkout@v4"]+`   # keep
       - name: Use foo
-        uses: acme/foo/sub/act@v2
+        uses: acme/foo/sub/act@`+shaMap["acme/foo@v2"]+`
       - uses: "./ignored/local"
       - uses: 'owner/with-single@`+shaMap["owner/with-single@v1"]+`'
       - uses: "owner/with-quotes@`+shaMap["owner/with-quotes@v1"]+`"
       - run: echo hello
   call:
-    uses: owner/repo/.github/workflows/reusable.yml@v1  # job-level
+    uses: owner/repo/.github/workflows/reusable.yml@`+shaMap["owner/repo@v1"]+`   # job-level
 `, "\n") + "\n"
 	assert.Equal(t, expected, out)
-	// 3 unique owner/repo@ref calls
-	assert.Equal(t, 3, calls)
+	// 5 unique owner/repo@ref calls
+	assert.Equal(t, 5, calls)
 }
 
 func TestProcess_WorkflowSkipsLocalURLAndExpressions(t *testing.T) {
@@ -161,7 +161,7 @@ jobs:
       - uses: org/repo@v1
       - uses: org/repo@v1
       - uses: org/repo/path/here@v1
-      - uses: org/repo@v1  # again
+      - uses: org/repo@v1	# again
 `, "\n") + "\n"
 
 	dir := t.TempDir()
@@ -185,7 +185,7 @@ jobs:
       - uses: org/repo@`+sha+`
       - uses: org/repo@`+sha+`
       - uses: org/repo/path/here@v1
-      - uses: org/repo@`+sha+`  # again
+      - uses: org/repo@`+sha+`	# again
 `, "\n") + "\n"
 	assert.Equal(t, expected, out)
 	assert.Equal(t, 1, calls) // only one unique owner/repo@ref
