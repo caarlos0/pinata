@@ -164,7 +164,7 @@ func resolve(owner, repo, ref string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("User-Agent", "gh-action-hasher")
+	req.Header.Set("User-Agent", "pinata")
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}

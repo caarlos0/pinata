@@ -1,4 +1,4 @@
-module github.com/caarlos0/gh-action-hasher
+module github.com/caarlos0/pinata
 
 go 1.25.1
 

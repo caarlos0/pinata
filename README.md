@@ -1,7 +1,7 @@
-# gh-action-hasher
+# pinata
 
 Pins GitHub Actions in `.yml` workflows to commit SHAs.
 
-- Install: `go install github.com/goreleaser/gh-action-hasher@latest`
-- Use: `gh-action-hasher [dir]` (default: .)
+- Install: `go install github.com/caarlos0/pinata@latest`
+- Use: `pinata [dir]` (default: .)
 - Optional: `GITHUB_TOKEN` for higher API limits
