@@ -52,7 +52,7 @@ func process(inPath, outPath string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("process: %w", err)
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 
 	var out strings.Builder
 	s := bufio.NewScanner(f)
@@ -160,7 +160,7 @@ func resolve(repo, ref string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("github: %s: %w", key, err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
 		return "", fmt.Errorf("github: %s: %s: %s", key, resp.Status, strings.TrimSpace(string(b)))
