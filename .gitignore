@@ -1,3 +1,5 @@
 gh-action-hasher
 # Added by goreleaser init:
 dist/
+.task/
+pinata

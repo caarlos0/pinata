@@ -1,0 +1,49 @@
+# https://taskfile.dev
+
+version: "3"
+
+tasks:
+  setup:
+    desc: Install dependencies
+    cmds:
+      - go mod tidy
+
+  build:
+    desc: Build the binary
+    sources:
+      - ./**/*.go
+    generates:
+      - ./pinata
+    cmds:
+      - go build .
+
+  test:
+    desc: Run unit tests
+    vars:
+      TEST_OPTIONS: '{{default "" .TEST_OPTIONS}}'
+      SOURCE_FILES: '{{default "./..." .SOURCE_FILES}}'
+      TEST_PATTERN: '{{default "." .TEST_PATTERN}}'
+    cmds:
+      - go test {{.TEST_OPTIONS}} -failfast -race -coverpkg=./... -covermode=atomic -coverprofile=coverage.txt {{.SOURCE_FILES}} -run {{.TEST_PATTERN}} -timeout=5m
+
+  ci:
+    desc: Run all CI steps
+    cmds:
+      - task: setup
+      - task: build
+      - task: test
+
+  default:
+    desc: Runs the default tasks
+    cmds:
+      - task: ci
+
+  release:
+    desc: Create a new tag
+    vars:
+      NEXT:
+        sh: svu n
+    cmds:
+      - git tag {{.NEXT}}
+      - echo {{.NEXT}}
+      - git push origin --tags
