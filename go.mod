@@ -1,4 +1,4 @@
-module github.com/goreleaser/gh-action-hasher
+module github.com/caarlos0/gh-action-hasher
 
 go 1.25.1
 
