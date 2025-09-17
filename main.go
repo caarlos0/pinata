@@ -33,7 +33,7 @@ func main() {
 		if err != nil || d.IsDir() || filepath.Ext(path) != ".yml" {
 			return nil
 		}
-		changed, err := process(path)
+		changed, err := process(path, path)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, path+": "+err.Error())
 			return err
@@ -47,8 +47,8 @@ func main() {
 	}
 }
 
-func process(path string) (bool, error) {
-	f, err := os.Open(path)
+func process(inPath, outPath string) (bool, error) {
+	f, err := os.Open(inPath)
 	if err != nil {
 		return false, err
 	}
@@ -75,7 +75,7 @@ func process(path string) (bool, error) {
 	if err := s.Err(); err != nil {
 		return false, err
 	}
-	return changed, os.WriteFile(path, []byte(out.String()), 0o644)
+	return changed, os.WriteFile(outPath, []byte(out.String()), 0o644)
 }
 
 func replaceInLine(line string) (string, error) {
@@ -147,7 +147,7 @@ func resolve(repo, ref string) (string, error) {
 	url := "https://api.github.com/repos/" + repo + "/commits/" + ref
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("github: %s: %w", key, err)
 	}
 	req.Header.Set("User-Agent", "gh-action-hasher")
 	if token != "" {
@@ -155,21 +155,22 @@ func resolve(repo, ref string) (string, error) {
 	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("github: %s: %w", key, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
-		return "", fmt.Errorf("github api error: %s: %s", resp.Status, strings.TrimSpace(string(b)))
+		return "", fmt.Errorf("github: %s: %s: %s", key, resp.Status, strings.TrimSpace(string(b)))
 	}
 	var out struct {
 		SHA string `json:"sha"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return "", err
+		return "", fmt.Errorf("github: %s: %w", key, err)
 	}
 	if out.SHA == "" {
 		return "", fmt.Errorf("empty sha")
+		return "", fmt.Errorf("github: empty sha")
 	}
 	cache[key] = out.SHA
 	return out.SHA, nil

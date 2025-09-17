@@ -1,0 +1,11 @@
+name: CI
+on: [push]
+jobs:
+  govulncheck:
+    uses: caarlos0/meta/.github/workflows/govulncheck.yml@main
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: docker/login-action@v2
+      - uses: actions/setup-go@v4
