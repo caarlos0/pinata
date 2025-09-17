@@ -50,7 +50,7 @@ func main() {
 func process(inPath, outPath string) (bool, error) {
 	f, err := os.Open(inPath)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("process: %w", err)
 	}
 	defer f.Close()
 
@@ -66,16 +66,19 @@ func process(inPath, outPath string) (bool, error) {
 		}
 		newLine, err := replaceInLine(line)
 		if err != nil {
-			return false, err
+			return false, fmt.Errorf("process: %w", err)
 		}
 		changed = changed || newLine != line
 		out.WriteString(newLine)
 		out.WriteByte('\n')
 	}
 	if err := s.Err(); err != nil {
-		return false, err
+		return false, fmt.Errorf("process: %w", err)
 	}
-	return changed, os.WriteFile(outPath, []byte(out.String()), 0o644)
+	if err := os.WriteFile(outPath, []byte(out.String()), 0o644); err != nil {
+		return false, fmt.Errorf("process: %w", err)
+	}
+	return changed, nil
 }
 
 func replaceInLine(line string) (string, error) {
@@ -169,7 +172,6 @@ func resolve(repo, ref string) (string, error) {
 		return "", fmt.Errorf("github: %s: %w", key, err)
 	}
 	if out.SHA == "" {
-		return "", fmt.Errorf("empty sha")
 		return "", fmt.Errorf("github: empty sha")
 	}
 	cache[key] = out.SHA
