@@ -89,7 +89,6 @@ func replaceInLine(line string) string {
 		return line
 	}
 
-	// owner/repo/path@ref
 	repo, ref, ok := strings.Cut(dep, "@")
 	if !ok {
 		fmt.Println("could not get ref from", line)
@@ -119,6 +118,10 @@ func isSHA(s string) bool {
 }
 
 func resolve(repo, ref string) (string, error) {
+	parts := strings.SplitN(repo, "/", 3)
+	if len(parts) >= 2 {
+		repo = parts[0] + "/" + parts[1]
+	}
 	key := repo + "@" + ref
 	if v, ok := cache[key]; ok {
 		return v, nil
