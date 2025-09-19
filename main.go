@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 )
@@ -29,22 +30,26 @@ func main() {
 	if len(os.Args) > 1 {
 		dir = os.Args[1]
 	}
+	var changed, total int
 	if err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() || filepath.Ext(path) != ".yml" {
+		if err != nil || d.IsDir() || !slices.Contains([]string{".yml", ".yaml"}, filepath.Ext(path)) {
 			return nil
 		}
-		changed, err := process(path, path)
+		total++
+		change, err := process(path, path)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, path+": "+err.Error())
 			return err
 		}
-		if changed {
+		if change {
+			changed++
 			fmt.Println("updated", path)
 		}
 		return nil
 	}); err != nil {
 		os.Exit(1)
 	}
+	fmt.Printf("changed %d out of %d files\n", changed, total)
 }
 
 func process(inPath, outPath string) (bool, error) {
