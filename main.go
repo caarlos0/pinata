@@ -35,12 +35,12 @@ func main() {
 			return nil
 		}
 		total++
-		change, err := process(path, path)
+		didChange, err := process(path, path)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, path+": "+err.Error())
 			return err
 		}
-		if change {
+		if didChange {
 			changed++
 			fmt.Println("updated", path)
 		}
