@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"time"
 )
@@ -32,7 +31,7 @@ func main() {
 	}
 	var changed, total int
 	if err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() || !slices.Contains([]string{".yml", ".yaml"}, filepath.Ext(path)) {
+		if err != nil || d.IsDir() || !isYaml(path) {
 			return nil
 		}
 		total++
@@ -183,4 +182,9 @@ func resolve(repo, ref string) (string, error) {
 	}
 	cache[key] = out.SHA
 	return out.SHA, nil
+}
+
+func isYaml(path string) bool {
+	ext := filepath.Ext(path)
+	return ext == ".yml" || ext == ".yaml"
 }
