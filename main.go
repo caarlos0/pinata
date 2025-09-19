@@ -29,22 +29,26 @@ func main() {
 	if len(os.Args) > 1 {
 		dir = os.Args[1]
 	}
+	var changed, total int
 	if err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() || filepath.Ext(path) != ".yml" {
+		if err != nil || d.IsDir() || !isYaml(path) {
 			return nil
 		}
-		changed, err := process(path, path)
+		total++
+		didChange, err := process(path, path)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, path+": "+err.Error())
 			return err
 		}
-		if changed {
+		if didChange {
+			changed++
 			fmt.Println("updated", path)
 		}
 		return nil
 	}); err != nil {
 		os.Exit(1)
 	}
+	fmt.Printf("changed %d out of %d files\n", changed, total)
 }
 
 func process(inPath, outPath string) (bool, error) {
@@ -178,4 +182,9 @@ func resolve(repo, ref string) (string, error) {
 	}
 	cache[key] = out.SHA
 	return out.SHA, nil
+}
+
+func isYaml(path string) bool {
+	ext := filepath.Ext(path)
+	return ext == ".yml" || ext == ".yaml"
 }
