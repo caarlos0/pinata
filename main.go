@@ -148,12 +148,12 @@ func replaceInLine(line string) (string, error) {
 	}
 
 	line = strings.Replace(line, dep, repo+"@"+newRef, 1)
-	// remove any trailing comments
-	if idx := strings.Index(line, " # "); idx > -1 {
-		line = line[:idx]
-	}
-	// add the tag comment if we have it
 	if tagName != "" && tagName != newRef {
+		// remove any trailing comments
+		if idx := strings.Index(line, " # "); idx > -1 {
+			line = line[:idx]
+		}
+		// add the tag comment if we have it
 		line += " # " + tagName
 	}
 	return line, nil
