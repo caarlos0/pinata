@@ -115,7 +115,6 @@ func replaceInLine(line string) (string, error) {
 		return line, nil
 	}
 
-	// handle subpaths: only pin if it's a reusable workflow under .github/workflows/
 	baseRepo := repo
 	if parts := strings.SplitN(repo, "/", 3); len(parts) >= 3 {
 		baseRepo = parts[0] + "/" + parts[1]
