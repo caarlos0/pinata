@@ -2,10 +2,12 @@ name: CI
 on: [push]
 jobs:
   govulncheck:
-    uses: caarlos0/meta/.github/workflows/govulncheck.yml@395f87b2cc4fbb0a99db4decb1b3bbd16bc07cfc
+    uses: caarlos0/meta/.github/workflows/govulncheck.yml@395f87b2cc4fbb0a99db4decb1b3bbd16bc07cfc # main
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744
-      - uses: docker/login-action@465a07811f14bebb1938fbed4728c6a1ff8901fc
-      - uses: actions/setup-go@19bb51245e9c80abacb2e91cc42b33fa478b8639
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: docker/login-action@465a07811f14bebb1938fbed4728c6a1ff8901fc # v2.2.0
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+      - uses: github/codeql-action/autobuild@528ca598d956c91826bd742262cdfc5d02b77710 # v3
+      - uses: github/codeql-action/analyze@192325c86100d080feab897ff886c34abd4c83a3 # 192325c86100d080feab897ff886c34abd4c83a3

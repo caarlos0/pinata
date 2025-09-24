@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,15 +12,12 @@ import (
 	"time"
 )
 
-const (
-	usesPrefix = "uses:"
-	shaLen     = 40
-)
+const usesPrefix = "uses:"
 
 var (
 	httpClient = &http.Client{Timeout: 15 * time.Second}
 	token      = os.Getenv("GITHUB_TOKEN")
-	cache      = map[string]string{}
+	cache      = map[string]Tag{}
 )
 
 func main() {
@@ -108,10 +104,6 @@ func replaceInLine(line string) (string, error) {
 		return line, nil
 	}
 
-	if isSHA(ref) {
-		return line, nil
-	}
-
 	// skip local paths, docker, urls, and expressions
 	if strings.HasPrefix(repo, "./") ||
 		strings.HasPrefix(repo, "../") ||
@@ -126,65 +118,123 @@ func replaceInLine(line string) (string, error) {
 	// handle subpaths: only pin if it's a reusable workflow under .github/workflows/
 	baseRepo := repo
 	if parts := strings.SplitN(repo, "/", 3); len(parts) >= 3 {
-		if !strings.HasPrefix(parts[2], ".github/workflows/") {
-			return line, nil
-		}
 		baseRepo = parts[0] + "/" + parts[1]
 	}
 
-	newRef, err := resolve(baseRepo, ref)
+	obj, err := getFullTag(baseRepo, ref)
 	if err != nil {
 		return line, err
 	}
-
-	return strings.Replace(line, dep, repo+"@"+newRef, 1), nil
-}
-
-func isSHA(s string) bool {
-	if len(s) != shaLen {
-		return false
+	if obj.Object.SHA == "" {
+		// its not a tag, so maybe pointing to a branch?
+		obj, err = getBranch(baseRepo, ref)
+		if err != nil {
+			return line, err
+		}
 	}
-	_, err := hex.DecodeString(s)
-	return err == nil
+	tag := obj.Name
+	ref = obj.Object.SHA
+
+	line = strings.Replace(line, dep, repo+"@"+ref, 1)
+	// remove any trailing comments
+	if idx := strings.Index(line, " # "); idx > -1 {
+		line = line[:idx]
+	}
+	// add the tag comment if we have it
+	if tag != "" {
+		line += " # " + tag
+	}
+	return line, nil
 }
 
-func resolve(repo, ref string) (string, error) {
+func getBranch(repo, ref string) (Tag, error) {
 	key := repo + "@" + ref
 	if v, ok := cache[key]; ok {
 		return v, nil
 	}
-	url := "https://api.github.com/repos/" + repo + "/commits/" + ref
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	r, status, err := getGH("https://api.github.com/repos/" + repo + "/commits/" + ref)
 	if err != nil {
-		return "", fmt.Errorf("github: %s: %w", key, err)
+		return Tag{}, fmt.Errorf("github: branch: %s: %w", key, err)
 	}
-	req.Header.Set("User-Agent", "gh-action-hasher")
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
+	if status != http.StatusOK {
+		return Tag{}, fmt.Errorf("github: branch: %s: status %d", key, status)
 	}
-	resp, err := httpClient.Do(req)
+
+	var obj Object
+	if err := json.NewDecoder(r).Decode(&obj); err != nil {
+		return Tag{}, fmt.Errorf("github: branch: %s: %w", key, err)
+	}
+	result := Tag{
+		Name:   ref,
+		Object: obj,
+	}
+	cache[key] = result
+	return result, nil
+}
+
+func getFullTag(repo, ref string) (Tag, error) {
+	key := repo + "@" + ref
+	if v, ok := cache[key]; ok {
+		return v, nil
+	}
+	r, status, err := getGH("https://api.github.com/repos/" + repo + "/git/refs/tags")
 	if err != nil {
-		return "", fmt.Errorf("github: %s: %w", key, err)
+		return Tag{}, fmt.Errorf("github: tag: %s: %w", key, err)
 	}
-	defer resp.Body.Close() //nolint:errcheck
-	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
-		return "", fmt.Errorf("github: %s: %s: %s", key, resp.Status, strings.TrimSpace(string(b)))
+	defer r.Close()
+	if status == http.StatusNotFound {
+		return Tag{}, nil
 	}
-	var out struct {
-		SHA string `json:"sha"`
+	var out []Tag
+	if err := json.NewDecoder(r).Decode(&out); err != nil {
+		return Tag{}, fmt.Errorf("github: tag: %s: %w", key, err)
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return "", fmt.Errorf("github: %s: %w", key, err)
+	var candidates []Tag
+	for _, tag := range out {
+		tag.Name = strings.TrimPrefix(tag.Ref, "refs/tags/")
+		if tag.Name == ref {
+			ref = tag.Object.SHA
+		}
+		if tag.Object.SHA == ref {
+			candidates = append(candidates, tag)
+		}
 	}
-	if out.SHA == "" {
-		return "", fmt.Errorf("github: empty sha")
+
+	if len(candidates) == 0 {
+		return Tag{}, nil
 	}
-	cache[key] = out.SHA
-	return out.SHA, nil
+	result := candidates[len(candidates)-1]
+	cache[key] = result
+	return result, nil
 }
 
 func isYaml(path string) bool {
 	ext := filepath.Ext(path)
 	return ext == ".yml" || ext == ".yaml"
+}
+
+func getGH(url string) (io.ReadCloser, int, error) {
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, 500, err
+	}
+	req.Header.Set("User-Agent", "pinata")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, 500, err
+	}
+	return resp.Body, resp.StatusCode, nil
+}
+
+type Tag struct {
+	Ref    string `json:"ref"`
+	Name   string `json:"-"`
+	Object Object `json:"object"`
+}
+
+type Object struct {
+	SHA string `json:"sha"`
 }
