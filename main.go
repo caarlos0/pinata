@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"cmp"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,9 +12,14 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/caarlos0/log"
 )
 
-const usesPrefix = "uses:"
+const (
+	usesPrefix = "uses:"
+	shaLen     = 40
+)
 
 var (
 	httpClient = &http.Client{Timeout: 15 * time.Second}
@@ -27,6 +33,7 @@ func main() {
 	if len(os.Args) > 1 {
 		dir = os.Args[1]
 	}
+	log.WithField("dir", dir).Info("pinning")
 	var changed, total int
 	if err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !isYaml(path) {
@@ -35,18 +42,24 @@ func main() {
 		total++
 		didChange, err := process(path, path)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, path+": "+err.Error())
+			log.WithError(err).
+				WithField("file", path).
+				Error("could not process")
 			return err
 		}
 		if didChange {
 			changed++
-			fmt.Println("updated", path)
+			log.WithField("file", path).
+				Info("updated")
 		}
 		return nil
 	}); err != nil {
 		os.Exit(1)
 	}
-	fmt.Printf("changed %d out of %d files\n", changed, total)
+	log.WithField("dir", dir).
+		WithField("total", total).
+		WithField("changed", changed).
+		Info("done!")
 }
 
 func process(inPath, outPath string) (bool, error) {
@@ -103,6 +116,13 @@ func replaceInLine(line string) (string, error) {
 
 	repo, ref, ok := strings.Cut(dep, "@")
 	if !ok {
+		return line, nil
+	}
+
+	if isSHA(ref) {
+		log.WithField("line", line).
+			WithField("ref", ref).
+			Debug("ignoring")
 		return line, nil
 	}
 
@@ -239,4 +259,12 @@ type Tag struct {
 
 type Object struct {
 	SHA string `json:"sha"`
+}
+
+func isSHA(s string) bool {
+	if len(s) != shaLen {
+		return false
+	}
+	_, err := hex.DecodeString(s)
+	return err == nil
 }
