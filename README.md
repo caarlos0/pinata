@@ -2,7 +2,7 @@
 
 Make your GitHub Actions usage more secure by pinning them to their SHA's.
 
-<img width="1624" height="974" alt="CleanShot 2025-09-17 at 11 00 34@2x" src="https://github.com/user-attachments/assets/d7812b1f-e849-4da2-a54b-6475db657ddf" />
+<img width="1930" height="994" alt="CleanShot 2025-09-24 at 01 45 46@2x" src="https://github.com/user-attachments/assets/bce6ec86-1274-4401-8fc7-8c5d23eaf462" />
 
 
 ## Install
