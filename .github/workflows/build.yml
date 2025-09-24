@@ -33,20 +33,16 @@ jobs:
   license-check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
-      - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
         with:
           go-version: stable
       - name: Check licenses
         run: go run github.com/google/go-licenses/v2@latest check --allowed_licenses=MIT,Apache-2.0,BSD-3-Clause,BSD-2-Clause,ISC ./...
-  govulncheck:
-    uses: caarlos0/meta/.github/workflows/govulncheck.yml@395f87b2cc4fbb0a99db4decb1b3bbd16bc07cfc
-    with:
-      go-version: stable
   semgrep:
-    uses: caarlos0/meta/.github/workflows/semgrep.yml@395f87b2cc4fbb0a99db4decb1b3bbd16bc07cfc
+    uses: caarlos0/meta/.github/workflows/semgrep.yml@main
   ruleguard:
-    uses: caarlos0/meta/.github/workflows/ruleguard.yml@395f87b2cc4fbb0a99db4decb1b3bbd16bc07cfc
+    uses: caarlos0/meta/.github/workflows/ruleguard.yml@main
     with:
       go-version: stable
       args: "-disable largeloopcopy"
@@ -56,17 +52,17 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
-      - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
         with:
           go-version: stable
-      - uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611
+      - uses: go-task/setup-task@0ab1b2a65bc55236a3bc64cde78f80e20e8885c2 # v1.0.0
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - run: task ci
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7
+      - uses: codecov/codecov-action@af09b5e394c93991b95a5e7646aeb90c1917f78f # v5.5.1
         if: matrix.os == 'ubuntu-latest'
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
