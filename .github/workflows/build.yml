@@ -10,21 +10,7 @@ on:
       - v*
     branches:
       - main
-    paths:
-      - "go.*"
-      - "**/*.go"
-      - "Taskfile.yml"
-      - ".github/workflows/*.yml"
-      - "testdata/**"
-      - ".goreleaser.yml"
   pull_request:
-    paths:
-      - "go.*"
-      - "**/*.go"
-      - "Taskfile.yml"
-      - ".github/workflows/*.yml"
-      - "testdata/**"
-      - ".goreleaser.yml"
 
 permissions:
   contents: read
