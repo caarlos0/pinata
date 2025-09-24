@@ -27,6 +27,7 @@ func main() {
 	if len(os.Args) > 1 {
 		dir = os.Args[1]
 	}
+	log.WithField("dir", dir).Info("pinning")
 	var changed, total int
 	if err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !isYaml(path) {
@@ -35,18 +36,24 @@ func main() {
 		total++
 		didChange, err := process(path, path)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, path+": "+err.Error())
+			log.WithError(err).
+				WithField("file", path).
+				Error("could not process")
 			return err
 		}
 		if didChange {
 			changed++
-			fmt.Println("updated", path)
+			log.WithField("file", path).
+				Info("updated")
 		}
 		return nil
 	}); err != nil {
 		os.Exit(1)
 	}
-	fmt.Printf("changed %d out of %d files\n", changed, total)
+	log.WithField("dir", dir).
+		WithField("total", total).
+		WithField("changed", changed).
+		Info("done!")
 }
 
 func process(inPath, outPath string) (bool, error) {
