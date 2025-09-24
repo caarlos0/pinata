@@ -140,7 +140,7 @@ func replaceInLine(line string) (string, error) {
 		line = line[:idx]
 	}
 	// add the tag comment if we have it
-	if tag != "" {
+	if tag != "" && tag != ref {
 		line += " # " + tag
 	}
 	return line, nil
