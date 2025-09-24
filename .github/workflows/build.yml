@@ -40,9 +40,9 @@ jobs:
       - name: Check licenses
         run: go run github.com/google/go-licenses/v2@latest check --allowed_licenses=MIT,Apache-2.0,BSD-3-Clause,BSD-2-Clause,ISC ./...
   semgrep:
-    uses: caarlos0/meta/.github/workflows/semgrep.yml@main
+    uses: caarlos0/meta/.github/workflows/semgrep.yml@c7f17af352dac91fa6c785d06ebac8547f1abdd3 # v0.1.0
   ruleguard:
-    uses: caarlos0/meta/.github/workflows/ruleguard.yml@main
+    uses: caarlos0/meta/.github/workflows/ruleguard.yml@c7f17af352dac91fa6c785d06ebac8547f1abdd3 # v0.1.0
     with:
       go-version: stable
       args: "-disable largeloopcopy"

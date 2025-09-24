@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,7 +18,8 @@ const usesPrefix = "uses:"
 var (
 	httpClient = &http.Client{Timeout: 15 * time.Second}
 	token      = os.Getenv("GITHUB_TOKEN")
-	cache      = map[string]Tag{}
+	tagCache   = map[string]Tag{}
+	refCache   = map[string]Object{}
 )
 
 func main() {
@@ -120,60 +122,61 @@ func replaceInLine(line string) (string, error) {
 		baseRepo = parts[0] + "/" + parts[1]
 	}
 
-	obj, err := getFullTag(baseRepo, ref)
+	tagName, newRef, err := getInfo(baseRepo, ref)
 	if err != nil {
 		return line, err
 	}
-	if obj.Object.SHA == "" {
-		// its not a tag, so maybe pointing to a branch?
-		obj, err = getBranch(baseRepo, ref)
-		if err != nil {
-			return line, err
-		}
-	}
-	tag := obj.Name
-	ref = obj.Object.SHA
 
-	line = strings.Replace(line, dep, repo+"@"+ref, 1)
+	line = strings.Replace(line, dep, repo+"@"+newRef, 1)
 	// remove any trailing comments
 	if idx := strings.Index(line, " # "); idx > -1 {
 		line = line[:idx]
 	}
 	// add the tag comment if we have it
-	if tag != "" && tag != ref {
-		line += " # " + tag
+	if tagName != "" && tagName != newRef {
+		line += " # " + tagName
 	}
 	return line, nil
 }
 
-func getBranch(repo, ref string) (Tag, error) {
+func getInfo(baseRepo, version string) (string, string, error) {
+	tag, err := getTag(baseRepo, version)
+	if err != nil {
+		return "", "", err
+	}
+	ref, err := getRef(baseRepo, version)
+	if err != nil {
+		return "", "", err
+	}
+	tagName := cmp.Or(tag.Name, version)
+	newRef := cmp.Or(ref.SHA, tag.Object.SHA, version)
+	return tagName, newRef, nil
+}
+
+func getRef(repo, ref string) (Object, error) {
 	key := repo + "@" + ref
-	if v, ok := cache[key]; ok {
+	if v, ok := refCache[key]; ok {
 		return v, nil
 	}
 	r, status, err := getGH("https://api.github.com/repos/" + repo + "/commits/" + ref)
 	if err != nil {
-		return Tag{}, fmt.Errorf("github: branch: %s: %w", key, err)
+		return Object{}, fmt.Errorf("github: branch: %s: %w", key, err)
 	}
 	if status != http.StatusOK {
-		return Tag{}, fmt.Errorf("github: branch: %s: status %d", key, status)
+		return Object{}, fmt.Errorf("github: branch: %s: status %d", key, status)
 	}
 
 	var obj Object
 	if err := json.NewDecoder(r).Decode(&obj); err != nil {
-		return Tag{}, fmt.Errorf("github: branch: %s: %w", key, err)
+		return Object{}, fmt.Errorf("github: branch: %s: %w", key, err)
 	}
-	result := Tag{
-		Name:   ref,
-		Object: obj,
-	}
-	cache[key] = result
-	return result, nil
+	refCache[key] = obj
+	return obj, nil
 }
 
-func getFullTag(repo, ref string) (Tag, error) {
+func getTag(repo, ref string) (Tag, error) {
 	key := repo + "@" + ref
-	if v, ok := cache[key]; ok {
+	if v, ok := tagCache[key]; ok {
 		return v, nil
 	}
 	r, status, err := getGH("https://api.github.com/repos/" + repo + "/git/refs/tags")
@@ -203,7 +206,7 @@ func getFullTag(repo, ref string) (Tag, error) {
 		return Tag{}, nil
 	}
 	result := candidates[len(candidates)-1]
-	cache[key] = result
+	tagCache[key] = result
 	return result, nil
 }
 
