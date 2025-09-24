@@ -181,7 +181,7 @@ func getFullTag(repo, ref string) (Tag, error) {
 	if err != nil {
 		return Tag{}, fmt.Errorf("github: tag: %s: %w", key, err)
 	}
-	defer r.Close()
+	defer r.Close() // nolint:errcheck
 	if status == http.StatusNotFound {
 		return Tag{}, nil
 	}
