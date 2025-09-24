@@ -13,3 +13,5 @@ jobs:
       - uses: github/codeql-action/analyze@192325c86100d080feab897ff886c34abd4c83a3
       - uses: ossf/scorecard-action@v2.4.2
       - uses: github/codeql-action/upload-sarif@192325c86100d080feab897ff886c34abd4c83a3 # v3.30.3
+      - uses: codecov/codecov-action@af09b5e394c93991b95a5e7646aeb90c1917f78f # v5.5.1
+

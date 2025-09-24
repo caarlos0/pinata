@@ -10,9 +10,11 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/caarlos0/log"
 )
 
@@ -214,6 +216,13 @@ func getTag(repo, ref string) (Tag, error) {
 	var candidates []Tag
 	for _, tag := range out {
 		tag.Name = strings.TrimPrefix(tag.Ref, "refs/tags/")
+		v, err := semver.NewVersion(tag.Name)
+		if err != nil {
+			log.WithField("tag", tag.Name).
+				Warn("ignoring invalid tag")
+			continue
+		}
+		tag.Version = v
 		if tag.Name == ref {
 			ref = tag.Object.SHA
 		}
@@ -221,7 +230,9 @@ func getTag(repo, ref string) (Tag, error) {
 			candidates = append(candidates, tag)
 		}
 	}
-
+	slices.SortFunc(candidates, func(a, b Tag) int {
+		return a.Version.Compare(b.Version)
+	})
 	if len(candidates) == 0 {
 		return Tag{}, nil
 	}
@@ -252,9 +263,10 @@ func getGH(url string) (io.ReadCloser, int, error) {
 }
 
 type Tag struct {
-	Ref    string `json:"ref"`
-	Name   string `json:"-"`
-	Object Object `json:"object"`
+	Ref     string          `json:"ref"`
+	Name    string          `json:"-"`
+	Version *semver.Version `json:"-"`
+	Object  Object          `json:"object"`
 }
 
 type Object struct {

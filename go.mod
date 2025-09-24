@@ -3,6 +3,7 @@ module github.com/caarlos0/pinata
 go 1.25.1
 
 require (
+	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/caarlos0/log v0.5.1
 	github.com/charmbracelet/x/exp/golden v0.0.0-20250916153604-9a2e892ed98e
 	github.com/stretchr/testify v1.11.1
