@@ -215,7 +215,7 @@ func isYaml(path string) bool {
 func getGH(url string) (io.ReadCloser, int, error) {
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
-		return nil, 500, err
+		return nil, 0, err
 	}
 	req.Header.Set("User-Agent", "pinata")
 	if token != "" {
@@ -223,7 +223,7 @@ func getGH(url string) (io.ReadCloser, int, error) {
 	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return nil, 500, err
+		return nil, 0, err
 	}
 	return resp.Body, resp.StatusCode, nil
 }
