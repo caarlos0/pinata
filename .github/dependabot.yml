@@ -3,8 +3,10 @@ updates:
   - package-ecosystem: "gomod"
     directory: "/"
     schedule:
-      interval: "daily"
-      time: "08:00"
+      interval: "weekly"
+      day: "monday"
+      time: "05:00"
+      timezone: "America/New_York"
     labels:
       - "dependencies"
     commit-message:
@@ -14,13 +16,23 @@ updates:
       - dependency-name: github.com/charmbracelet/lipgloss/v2
         versions:
           - v2.0.0-beta1
+    groups:
+      gomod:
+        patterns:
+          - "*"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "daily"
-      time: "08:00"
+      interval: "weekly"
+      day: "monday"
+      time: "05:00"
+      timezone: "America/New_York"
     labels:
       - "dependencies"
     commit-message:
-      prefix: "chore"
+      prefix: "ci"
       include: "scope"
+    groups:
+      actions:
+        patterns:
+          - "*"
