@@ -44,6 +44,6 @@ tasks:
       NEXT:
         sh: svu n
     cmds:
-      - git tag {{.NEXT}}
+      - git tag --sign {{.NEXT}}
       - echo {{.NEXT}}
-      - git push origin --tags
+      - git push origin --follow-tags
