@@ -8,7 +8,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: docker/login-action@v2
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v4
       - uses: github/codeql-action/autobuild@v2
       - uses: github/codeql-action/analyze@192325c86100d080feab897ff886c34abd4c83a3
       - uses: ossf/scorecard-action@v2.4.2

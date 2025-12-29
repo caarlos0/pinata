@@ -13,7 +13,7 @@ jobs:
       - uses: https://example.com/action@v1
       - width:
           a: b
-        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        uses: actions/setup-go@7b8cf10d4e4a01d4992d18a89f4d7dc5a3e6d6f4 # v4.3.0
       - uses: caarlos0/meta/.github/workflows/govulncheck.yml@c7f17af352dac91fa6c785d06ebac8547f1abdd3 # v0.1.0
       - uses: docker/setup-qemu-action@2b82ce82d56a2a04d2637cd93a637ae1b359c0a7 # v2.2.0
       - uses: docker/setup-buildx-action@885d1462b80bc1c1c7f0b00334ad271f09369c55 # v2.10.0
