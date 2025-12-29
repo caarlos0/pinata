@@ -13,7 +13,7 @@ jobs:
       - uses: https://example.com/action@v1
       - width:
           a: b
-        uses: actions/setup-go@v5 # comment
+        uses: actions/setup-go@v4 # comment
       - uses: caarlos0/meta/.github/workflows/govulncheck.yml@v0.1.0 # comment lalal
       - uses: docker/setup-qemu-action@v2 # comment
       - uses: docker/setup-buildx-action@v2
