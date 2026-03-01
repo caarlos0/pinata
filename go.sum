@@ -4,8 +4,8 @@ github.com/Masterminds/semver/v3 v3.4.0 h1:Zog+i5UMtVoCU8oKka5P7i9q9HgrJeGzI9SA1
 github.com/Masterminds/semver/v3 v3.4.0/go.mod h1:4V+yj/TJE1HU9XfppCwVMZq3I84lprf4nC11bSS5beM=
 github.com/aymanbagabas/go-udiff v0.3.1 h1:LV+qyBQ2pqe0u42ZsUEtPiCaUoqgA9gYRDs3vj1nolY=
 github.com/aymanbagabas/go-udiff v0.3.1/go.mod h1:G0fsKmG+P6ylD0r6N/KgQD/nWzgfnl8ZBcNLgcbrw8E=
-github.com/caarlos0/log v0.5.4 h1:4DJwTt8MvvRF8BM4I3j2sbmdf4DYY0HVqKpg09cAgaU=
-github.com/caarlos0/log v0.5.4/go.mod h1:iAv3N3ZkiEQUmZ8fGdD8bMA4zq6jMSlnz9D87333Gi0=
+github.com/caarlos0/log v0.6.0 h1:iS+oZ7DB8wpJxOjA4+BHkZQtrx8sMu8AYNZVQukmEtw=
+github.com/caarlos0/log v0.6.0/go.mod h1:iAv3N3ZkiEQUmZ8fGdD8bMA4zq6jMSlnz9D87333Gi0=
 github.com/charmbracelet/colorprofile v0.4.1 h1:a1lO03qTrSIRaK8c3JRxJDZOvhvIeSco3ej+ngLk1kk=
 github.com/charmbracelet/colorprofile v0.4.1/go.mod h1:U1d9Dljmdf9DLegaJ0nGZNJvoXAhayhmidOdcBwAvKk=
 github.com/charmbracelet/ultraviolet v0.0.0-20251120225753-26363bddd922 h1:xT8rVR6RTBTx90ViTIrB766UNC9wnGzgkrfO6UCsiZ0=
