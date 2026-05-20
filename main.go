@@ -5,6 +5,8 @@ import (
 	"cmp"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"net/http"
@@ -19,30 +21,117 @@ import (
 )
 
 const (
-	usesPrefix = "uses:"
-	shaLen     = 40
+	usesPrefix          = "uses:"
+	shaLen              = 40
+	defaultWorkflowsDir = ".github/workflows"
 )
 
 var (
-	httpClient = &http.Client{Timeout: 15 * time.Second}
-	token      = os.Getenv("GITHUB_TOKEN")
-	tagCache   = map[string]Tag{}
-	refCache   = map[string]Object{}
+	httpClient    = &http.Client{Timeout: 15 * time.Second}
+	token         = os.Getenv("GITHUB_TOKEN")
+	apiBaseURL    = "https://api.github.com"
+	refCache      = map[string]Object{}
+	repoTagsCache = map[string][]Tag{}
 )
 
 func main() {
-	dir := ".github/workflows"
-	if len(os.Args) > 1 {
-		dir = os.Args[1]
+	if err := cli(os.Args[1:]); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			os.Exit(0)
+		}
+		os.Exit(1)
 	}
-	log.WithField("dir", dir).Info("pinning")
+}
+
+func cli(args []string) error {
+	fs := flag.NewFlagSet("pinata", flag.ContinueOnError)
+	fs.Usage = func() { printUsage(fs) }
+
+	update := fs.Bool("update", false, "bump pinned actions to the latest release")
+	skipOrgsFlag := fs.String("skip-orgs", "", "comma-separated action org prefixes to skip (e.g. actions,microsoft)")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	dir := defaultWorkflowsDir
+	switch rest := fs.Args(); len(rest) {
+	case 0:
+	case 1:
+		dir = rest[0]
+	default:
+		return fmt.Errorf("unexpected arguments: %v", rest[1:])
+	}
+
+	if err := validateDir(dir); err != nil {
+		return err
+	}
+
+	return run(*update, dir, parseSkipOrgs(*skipOrgsFlag))
+}
+
+func parseSkipOrgs(s string) []string {
+	if s == "" {
+		return nil
+	}
+	var out []string
+	for part := range strings.SplitSeq(s, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
+}
+
+func validateDir(dir string) error {
+	info, err := os.Stat(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("directory not found: %s", dir)
+		}
+		return fmt.Errorf("directory: %s: %w", dir, err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("not a directory: %s", dir)
+	}
+	return nil
+}
+
+func printUsage(fs *flag.FlagSet) {
+	fmt.Fprintf(os.Stderr, "Usage: pinata [flags] [dir]\n\n")
+	fmt.Fprintf(os.Stderr, "Pin GitHub Actions to their commit SHAs, or update pinned actions to the latest release.\n\n")
+	fmt.Fprintf(os.Stderr, "Examples:\n")
+	fmt.Fprintf(os.Stderr, "  pinata\n")
+	fmt.Fprintf(os.Stderr, "  pinata ./myrepo/.github/workflows\n")
+	fmt.Fprintf(os.Stderr, "  pinata -update\n")
+	fmt.Fprintf(os.Stderr, "  pinata -skip-orgs actions,microsoft\n\n")
+	fmt.Fprintf(os.Stderr, "dir defaults to %s\n\n", defaultWorkflowsDir)
+	fmt.Fprintf(os.Stderr, "Flags:\n")
+	fmt.Fprintf(os.Stderr, "-h, -help    show this help message and exit\n")
+	fs.PrintDefaults()
+}
+
+func run(update bool, dir string, skipOrgs []string) error {
+	logVerb := "pinning"
+	if update {
+		logVerb = "updating"
+	}
+	log.WithField("dir", dir).Info(logVerb)
+
+	var fn func(string) (string, error)
+	if update {
+		fn = func(line string) (string, error) { return updateInLine(line, skipOrgs) }
+	} else {
+		fn = func(line string) (string, error) { return replaceInLine(line, skipOrgs) }
+	}
+
 	var changed, total int
 	if err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !isYaml(path) {
 			return nil
 		}
 		total++
-		didChange, err := process(path, path)
+		didChange, err := processFile(path, path, fn)
 		if err != nil {
 			log.WithError(err).
 				WithField("file", path).
@@ -56,15 +145,16 @@ func main() {
 		}
 		return nil
 	}); err != nil {
-		os.Exit(1)
+		return err
 	}
 	log.WithField("dir", dir).
 		WithField("total", total).
 		WithField("changed", changed).
 		Info("done!")
+	return nil
 }
 
-func process(inPath, outPath string) (bool, error) {
+func processFile(inPath, outPath string, fn func(string) (string, error)) (bool, error) {
 	f, err := os.Open(inPath)
 	if err != nil {
 		return false, fmt.Errorf("process: %w", err)
@@ -81,7 +171,7 @@ func process(inPath, outPath string) (bool, error) {
 			out.WriteByte('\n')
 			continue
 		}
-		newLine, err := replaceInLine(line)
+		newLine, err := fn(line)
 		if err != nil {
 			return false, fmt.Errorf("process: %w", err)
 		}
@@ -100,65 +190,145 @@ func process(inPath, outPath string) (bool, error) {
 	return changed, nil
 }
 
-func replaceInLine(line string) (string, error) {
-	dep := line
-	if i := strings.Index(dep, usesPrefix); i >= 0 {
-		dep = dep[i+len(usesPrefix):]
+type usesLine struct {
+	dep, repo, ref, comment string
+}
+
+func parseUsesLine(line string) (dep, repo, ref, commentVersion string, ok bool) {
+	idx := strings.Index(line, usesPrefix)
+	if idx < 0 {
+		return "", "", "", "", false
 	}
+	dep = line[idx+len(usesPrefix):]
 	if i := strings.Index(dep, " #"); i >= 0 {
+		commentVersion = strings.TrimSpace(dep[i+2:])
 		dep = dep[:i]
 	}
 	dep = strings.TrimSpace(dep)
 	dep = strings.TrimFunc(dep, func(r rune) bool {
 		return r == '"' || r == '\''
 	})
-	if dep == line {
-		return line, nil
-	}
-
-	repo, ref, ok := strings.Cut(dep, "@")
+	repo, ref, ok = strings.Cut(dep, "@")
 	if !ok {
-		return line, nil
+		return dep, "", "", commentVersion, false
 	}
+	return dep, repo, ref, commentVersion, true
+}
 
-	if isSHA(ref) {
-		log.WithField("line", line).
-			WithField("ref", ref).
-			Debug("ignoring")
-		return line, nil
+func parseActionUses(line string, skipOrgs []string) (usesLine, bool) {
+	dep, repo, ref, comment, ok := parseUsesLine(line)
+	if !ok || shouldSkipUses(repo, ref) || shouldSkipOrg(repo, skipOrgs) {
+		return usesLine{}, false
 	}
+	return usesLine{dep, repo, ref, comment}, true
+}
 
+func actionOrg(repo string) string {
+	org, _, _ := strings.Cut(repo, "/")
+	return org
+}
+
+func shouldSkipOrg(repo string, skipOrgs []string) bool {
+	if len(skipOrgs) == 0 {
+		return false
+	}
+	org := actionOrg(repo)
+	return slices.Contains(skipOrgs, org)
+}
+
+func shouldSkipUses(repo, ref string) bool {
 	// skip local paths, docker, urls, and expressions
-	if strings.HasPrefix(repo, "./") ||
+	return strings.HasPrefix(repo, "./") ||
 		strings.HasPrefix(repo, "../") ||
 		strings.HasPrefix(repo, "/") ||
 		strings.HasPrefix(repo, "docker://") ||
 		strings.HasPrefix(repo, "http://") ||
 		strings.HasPrefix(repo, "https://") ||
-		strings.Contains(ref, "${{") {
+		strings.Contains(ref, "${{")
+}
+
+func baseRepo(repo string) string {
+	if parts := strings.SplitN(repo, "/", 3); len(parts) >= 3 {
+		return parts[0] + "/" + parts[1]
+	}
+	return repo
+}
+
+func rewriteUsesLine(line, dep, repo, newRef, tagName string) string {
+	line = strings.Replace(line, dep, repo+"@"+newRef, 1)
+	if tagName != "" && tagName != newRef {
+		// remove any trailing comments
+		if idx := strings.Index(line, " #"); idx > -1 {
+			line = line[:idx]
+		}
+
+		// add the tag comment if we have it
+		line += " # " + tagName
+	}
+	return line
+}
+
+func replaceInLine(line string, skipOrgs []string) (string, error) {
+	uses, ok := parseActionUses(line, skipOrgs)
+	if !ok {
 		return line, nil
 	}
 
-	baseRepo := repo
-	if parts := strings.SplitN(repo, "/", 3); len(parts) >= 3 {
-		baseRepo = parts[0] + "/" + parts[1]
+	if isSHA(uses.ref) {
+		log.WithField("line", line).
+			WithField("ref", uses.ref).
+			Debug("ignoring")
+		return line, nil
 	}
 
-	tagName, newRef, err := getInfo(baseRepo, ref)
+	tagName, newRef, err := getInfo(baseRepo(uses.repo), uses.ref)
 	if err != nil {
 		return line, err
 	}
 
-	line = strings.Replace(line, dep, repo+"@"+newRef, 1)
-	if tagName != "" && tagName != newRef {
-		// remove any trailing comments
-		if idx := strings.Index(line, " # "); idx > -1 {
-			line = line[:idx]
-		}
-		// add the tag comment if we have it
-		line += " # " + tagName
+	return rewriteUsesLine(line, uses.dep, uses.repo, newRef, tagName), nil
+}
+
+func updateInLine(line string, skipOrgs []string) (string, error) {
+	return updateInLineWith(line, skipOrgs, getLatestTag, getInfo)
+}
+
+type (
+	tagGetter  func(string) (Tag, error)
+	infoGetter func(string, string) (string, string, error)
+)
+
+func updateInLineWith(line string, skipOrgs []string, latest tagGetter, info infoGetter) (string, error) {
+	uses, ok := parseActionUses(line, skipOrgs)
+	if !ok || !isSHA(uses.ref) {
+		return line, nil
 	}
-	return line, nil
+
+	latestTag, err := latest(baseRepo(uses.repo))
+	if err != nil {
+		return line, err
+	}
+	if latestTag.Name == "" {
+		return line, nil
+	}
+
+	if uses.comment != "" {
+		if cur, err := semver.NewVersion(strings.TrimPrefix(uses.comment, "v")); err == nil {
+			if !latestTag.Version.GreaterThan(cur) {
+				return line, nil
+			}
+		}
+	}
+
+	tagName, newRef, err := info(baseRepo(uses.repo), latestTag.Name)
+	if err != nil {
+		return line, err
+	}
+	if newRef == uses.ref {
+		return line, nil
+	}
+
+	return rewriteUsesLine(line, uses.dep, uses.repo, newRef, tagName), nil
 }
 
 func getInfo(baseRepo, version string) (string, string, error) {
@@ -180,40 +350,32 @@ func getRef(repo, ref string) (Object, error) {
 	if v, ok := refCache[key]; ok {
 		return v, nil
 	}
-	r, status, err := getGH("https://api.github.com/repos/" + repo + "/commits/" + ref)
+	obj, status, err := githubJSON[Object](apiBaseURL + "/repos/" + repo + "/commits/" + ref)
 	if err != nil {
 		return Object{}, fmt.Errorf("github: branch: %s: %w", key, err)
 	}
 	if status != http.StatusOK {
 		return Object{}, fmt.Errorf("github: branch: %s: status %d", key, status)
 	}
-
-	var obj Object
-	if err := json.NewDecoder(r).Decode(&obj); err != nil {
-		return Object{}, fmt.Errorf("github: branch: %s: %w", key, err)
-	}
 	refCache[key] = obj
 	return obj, nil
 }
 
-func getTag(repo, ref string) (Tag, error) {
-	key := repo + "@" + ref
-	if v, ok := tagCache[key]; ok {
+func listSemverTags(repo string) ([]Tag, error) {
+	if v, ok := repoTagsCache[repo]; ok {
 		return v, nil
 	}
-	r, status, err := getGH("https://api.github.com/repos/" + repo + "/git/refs/tags")
+	out, status, err := githubJSON[[]Tag](apiBaseURL + "/repos/" + repo + "/git/refs/tags")
 	if err != nil {
-		return Tag{}, fmt.Errorf("github: tag: %s: %w", key, err)
+		return nil, fmt.Errorf("github: tags: %s: %w", repo, err)
 	}
-	defer r.Close() // nolint:errcheck
 	if status == http.StatusNotFound {
-		return Tag{}, nil
+		return nil, nil
 	}
-	var out []Tag
-	if err := json.NewDecoder(r).Decode(&out); err != nil {
-		return Tag{}, fmt.Errorf("github: tag: %s: %w", key, err)
+	if status != http.StatusOK {
+		return nil, fmt.Errorf("github: tags: %s: status %d", repo, status)
 	}
-	var candidates []Tag
+	var tags []Tag
 	for _, tag := range out {
 		tag.Name = strings.TrimPrefix(tag.Ref, "refs/tags/")
 		v, err := semver.NewVersion(tag.Name)
@@ -223,27 +385,72 @@ func getTag(repo, ref string) (Tag, error) {
 			continue
 		}
 		tag.Version = v
+		tags = append(tags, tag)
+	}
+	slices.SortFunc(tags, func(a, b Tag) int {
+		return a.Version.Compare(b.Version)
+	})
+	repoTagsCache[repo] = tags
+	return tags, nil
+}
+
+func getLatestTag(repo string) (Tag, error) {
+	tags, err := listSemverTags(repo)
+	if err != nil || len(tags) == 0 {
+		return Tag{}, err
+	}
+	return tags[len(tags)-1], nil
+}
+
+func getTag(repo, ref string) (Tag, error) {
+	tags, err := listSemverTags(repo)
+	if err != nil {
+		return Tag{}, fmt.Errorf("github: tag: %s@%s: %w", repo, ref, err)
+	}
+	resolvedRef := ref
+	for _, tag := range tags {
 		if tag.Name == ref {
-			ref = tag.Object.SHA
+			resolvedRef = tag.Object.SHA
+			break
 		}
-		if tag.Object.SHA == ref {
+	}
+	var candidates []Tag
+	for _, tag := range tags {
+		if tag.Object.SHA == resolvedRef {
 			candidates = append(candidates, tag)
 		}
 	}
-	slices.SortFunc(candidates, func(a, b Tag) int {
-		return a.Version.Compare(b.Version)
-	})
 	if len(candidates) == 0 {
 		return Tag{}, nil
 	}
-	result := candidates[len(candidates)-1]
-	tagCache[key] = result
-	return result, nil
+	return candidates[len(candidates)-1], nil
+}
+
+func resetCaches() {
+	refCache = map[string]Object{}
+	repoTagsCache = map[string][]Tag{}
 }
 
 func isYaml(path string) bool {
 	ext := filepath.Ext(path)
 	return ext == ".yml" || ext == ".yaml"
+}
+
+func githubJSON[T any](url string) (T, int, error) {
+	var zero T
+	r, status, err := getGH(url)
+	if err != nil {
+		return zero, status, err
+	}
+	defer r.Close() //nolint:errcheck
+	if status != http.StatusOK {
+		return zero, status, nil
+	}
+	var v T
+	if err := json.NewDecoder(r).Decode(&v); err != nil {
+		return zero, status, err
+	}
+	return v, status, nil
 }
 
 func getGH(url string) (io.ReadCloser, int, error) {
@@ -252,6 +459,7 @@ func getGH(url string) (io.ReadCloser, int, error) {
 		return nil, 0, err
 	}
 	req.Header.Set("User-Agent", "pinata")
+	req.Header.Set("Accept", "application/vnd.github+json")
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
@@ -260,6 +468,14 @@ func getGH(url string) (io.ReadCloser, int, error) {
 		return nil, 0, err
 	}
 	return resp.Body, resp.StatusCode, nil
+}
+
+func isSHA(s string) bool {
+	if len(s) != shaLen {
+		return false
+	}
+	_, err := hex.DecodeString(s)
+	return err == nil
 }
 
 type Tag struct {
@@ -271,12 +487,4 @@ type Tag struct {
 
 type Object struct {
 	SHA string `json:"sha"`
-}
-
-func isSHA(s string) bool {
-	if len(s) != shaLen {
-		return false
-	}
-	_, err := hex.DecodeString(s)
-	return err == nil
 }

@@ -19,7 +19,12 @@ Or download from the [releases page](/releases).
 
 ## Usage
 
-```console
-$ pinata [dir] # Defaults to .github/workflows
-$ pinata ./myrepo/.github/workflows
+```bash
+pinata [dir]           # Pin version refs to SHAs. Defaults to .github/workflows
+pinata ./myrepo/.github/workflows
+pinata -update [dir]   # Bump pinned actions to the latest release
+pinata -skip-orgs actions,microsoft # Pin version refs to SHAs where the actions aren't from these github orgs
+pinata -skip-orgs actions,microsoft ./myrepo/.github/workflows
+pinata -update -skip-orgs microsoft # Bump pinned actions to the latest release where the actions aren't from these github orgs
+pinata -h              # Show help
 ```
