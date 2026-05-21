@@ -3,3 +3,5 @@ gh-action-hasher
 dist/
 .task/
 pinata
+
+/*.exe
