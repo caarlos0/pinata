@@ -23,3 +23,17 @@ Or download from the [releases page](/releases).
 $ pinata [dir] # Defaults to .github/workflows
 $ pinata ./myrepo/.github/workflows
 ```
+
+### Ignoring actions
+
+Use `--ignore` to leave some actions unpinned.
+It takes a glob, and may be set multiple times:
+
+```console
+$ pinata --ignore 'actions/*' --ignore 'github/*'
+$ pinata --ignore 'actions/checkout'
+```
+
+Globs are matched against the action name (e.g. `actions/checkout`), as well as
+against the `owner/repo` of actions living in a subdirectory, so `github/*`
+also ignores `github/codeql-action/analyze`.
