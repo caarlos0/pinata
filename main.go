@@ -69,7 +69,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprint(flag.CommandLine.Output(), `pinata pins the GitHub Actions used in [dir] to their SHAs.
+	_, _ = fmt.Fprint(flag.CommandLine.Output(), `pinata pins the GitHub Actions used in [dir] to their SHAs.
 
 Usage: pinata [options] [dir]
 
