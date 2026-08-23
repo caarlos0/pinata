@@ -5,10 +5,12 @@ import (
 	"cmp"
 	"encoding/hex"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -31,27 +33,29 @@ var (
 )
 
 func main() {
-	dir := ".github/workflows"
-	if len(os.Args) > 1 {
-		dir = os.Args[1]
-	}
+	var ignore globs
+	flag.Var(&ignore, "ignore", "glob of actions to ignore, may be set multiple times (e.g. github/*)")
+	flag.Usage = usage
+	flag.Parse()
+
+	dir := cmp.Or(flag.Arg(0), ".github/workflows")
 	log.WithField("dir", dir).Info("pinning")
 	var changed, total int
-	if err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() || !isYaml(path) {
+	if err := filepath.WalkDir(dir, func(file string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !isYaml(file) {
 			return nil
 		}
 		total++
-		didChange, err := process(path, path)
+		didChange, err := process(file, file, ignore)
 		if err != nil {
 			log.WithError(err).
-				WithField("file", path).
+				WithField("file", file).
 				Error("could not process")
 			return err
 		}
 		if didChange {
 			changed++
-			log.WithField("file", path).
+			log.WithField("file", file).
 				Info("updated")
 		}
 		return nil
@@ -64,7 +68,45 @@ func main() {
 		Info("done!")
 }
 
-func process(inPath, outPath string) (bool, error) {
+func usage() {
+	_, _ = fmt.Fprint(flag.CommandLine.Output(), `pinata pins the GitHub Actions used in [dir] to their SHAs.
+
+Usage: pinata [options] [dir]
+
+Dir defaults to .github/workflows.
+
+Options:
+`)
+	flag.PrintDefaults()
+}
+
+// globs is a list of action globs, e.g. github/*.
+type globs []string
+
+func (g *globs) String() string { return strings.Join(*g, ",") }
+
+func (g *globs) Set(s string) error {
+	// empty name never matches, but the pattern is still validated.
+	if _, err := path.Match(s, ""); err != nil {
+		return fmt.Errorf("invalid glob %q: %w", s, err)
+	}
+	*g = append(*g, s)
+	return nil
+}
+
+// match reports whether any of the given action names match any of the globs.
+func (g globs) match(names ...string) bool {
+	for _, glob := range g {
+		for _, name := range names {
+			if ok, _ := path.Match(glob, name); ok {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func process(inPath, outPath string, ignore globs) (bool, error) {
 	f, err := os.Open(inPath)
 	if err != nil {
 		return false, fmt.Errorf("process: %w", err)
@@ -81,7 +123,7 @@ func process(inPath, outPath string) (bool, error) {
 			out.WriteByte('\n')
 			continue
 		}
-		newLine, err := replaceInLine(line)
+		newLine, err := replaceInLine(line, ignore)
 		if err != nil {
 			return false, fmt.Errorf("process: %w", err)
 		}
@@ -100,7 +142,7 @@ func process(inPath, outPath string) (bool, error) {
 	return changed, nil
 }
 
-func replaceInLine(line string) (string, error) {
+func replaceInLine(line string, ignore globs) (string, error) {
 	dep := line
 	if i := strings.Index(dep, usesPrefix); i >= 0 {
 		dep = dep[i+len(usesPrefix):]
@@ -142,6 +184,13 @@ func replaceInLine(line string) (string, error) {
 	baseRepo := repo
 	if parts := strings.SplitN(repo, "/", 3); len(parts) >= 3 {
 		baseRepo = parts[0] + "/" + parts[1]
+	}
+
+	if ignore.match(repo, baseRepo) {
+		log.WithField("line", line).
+			WithField("action", repo).
+			Debug("ignoring")
+		return line, nil
 	}
 
 	tagName, newRef, err := getInfo(baseRepo, ref)
