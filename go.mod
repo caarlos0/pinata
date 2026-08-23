@@ -1,6 +1,6 @@
 module github.com/caarlos0/pinata
 
-go 1.25.1
+go 1.27.0
 
 require (
 	github.com/Masterminds/semver/v3 v3.5.0
