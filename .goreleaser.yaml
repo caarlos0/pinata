@@ -30,6 +30,7 @@ homebrew_casks:
   - repository:
       owner: caarlos0
       name: homebrew-tap
+      token: "{{ .Env.GH_PAT }}"
     url:
       verified: github.com/caarlos0/pinata
     hooks:
