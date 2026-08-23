@@ -69,11 +69,14 @@ func main() {
 }
 
 func usage() {
-	out := flag.CommandLine.Output()
-	fmt.Fprintf(out, "pinata pins the GitHub Actions used in [dir] to their SHAs.\n\n")
-	fmt.Fprintf(out, "Usage: pinata [options] [dir]\n\n")
-	fmt.Fprintf(out, "Dir defaults to .github/workflows.\n\n")
-	fmt.Fprintf(out, "Options:\n")
+	fmt.Fprint(flag.CommandLine.Output(), `pinata pins the GitHub Actions used in [dir] to their SHAs.
+
+Usage: pinata [options] [dir]
+
+Dir defaults to .github/workflows.
+
+Options:
+`)
 	flag.PrintDefaults()
 }
 
