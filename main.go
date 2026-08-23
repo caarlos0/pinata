@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"cmp"
 	"encoding/hex"
-	"encoding/json"
+	"encoding/json/v2"
 	"flag"
 	"fmt"
 	"io"
@@ -233,12 +233,13 @@ func getRef(repo, ref string) (Object, error) {
 	if err != nil {
 		return Object{}, fmt.Errorf("github: branch: %s: %w", key, err)
 	}
+	defer r.Close() //nolint:errcheck
 	if status != http.StatusOK {
 		return Object{}, fmt.Errorf("github: branch: %s: status %d", key, status)
 	}
 
 	var obj Object
-	if err := json.NewDecoder(r).Decode(&obj); err != nil {
+	if err := json.UnmarshalRead(r, &obj); err != nil {
 		return Object{}, fmt.Errorf("github: branch: %s: %w", key, err)
 	}
 	refCache[key] = obj
@@ -254,12 +255,12 @@ func getTag(repo, ref string) (Tag, error) {
 	if err != nil {
 		return Tag{}, fmt.Errorf("github: tag: %s: %w", key, err)
 	}
-	defer r.Close() // nolint:errcheck
+	defer r.Close() //nolint:errcheck
 	if status == http.StatusNotFound {
 		return Tag{}, nil
 	}
 	var out []Tag
-	if err := json.NewDecoder(r).Decode(&out); err != nil {
+	if err := json.UnmarshalRead(r, &out); err != nil {
 		return Tag{}, fmt.Errorf("github: tag: %s: %w", key, err)
 	}
 	var candidates []Tag
