@@ -5,7 +5,7 @@ go 1.27.0
 require (
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/caarlos0/log v0.6.2
-	github.com/charmbracelet/x/exp/golden v0.0.0-20250916153604-9a2e892ed98e
+	github.com/charmbracelet/x/exp/golden v0.1.0
 	github.com/stretchr/testify v1.12.1
 )
 
